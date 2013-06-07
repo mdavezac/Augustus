@@ -34,84 +34,6 @@ module SmithNormalForm
     return sigma, div(beta - sigma * a0, a1), beta
   end 
 
-  function choose_pivot{T <: Int}( t::Int, jt::Int, 
-                                   smith::Matrix{T}, 
-                                   left::Matrix{T} )
-    @assert t <= jt
-    @assert jt <= size(smith, 2)
-    while jt <= size(smith, 2) && nnz(smith[:, jt]) < 1
-      jt += 1
-    end
-    if jt > size(smith, 2); return -1; end
-    if nnz(smith[:, jt]) < 1; return jt; end
-    if smith[t, jt] == 0
-      k = findfirst(smith[:, jt])
-      smith[jt, :], smith[k, :] = smith[k, :], smith[jt, :]
-      left[jt, :], left[k, :] = left[k, :], left[jt, :]
-    end
-    return jt
-  end
-
-  function improve_pivot_col{T <: Int}( t::Int, jt::Int,
-                                        smith::Matrix{T}, 
-                                        left::Matrix{T} )
-    # Transform matrix such that matrix[:, jt] is zero except for alement t.
-    @assert t <= size(smith, 1)
-    @assert jt <= size(smith, 2)
-    @assert smith[t, jt] != 0
-    for k in 1:size(smith, 1)
-      # If same row or already zero, then continue
-      (k == t || smith[k, jt] == 0) && continue
-      # If not divisible, make divisible
-      if smith[k, jt] % smith[t, jt] != 0 
-        # Get parameters of gcd equation
-        sigma, tau, beta = solve_gcd_equation(smith[t, jt], smith[k, jt])
-        # Put beta on smith[t, jt]
-        smith[t, :] = sigma * smith[t, :] + tau * smith[k, :]
-        left[t, :] = sigma * left[t, :] + tau * left[k, :]
-      end
-      # Put 0 on smith[k, jt]
-      alpha = div(smith[k, jt], smith[t, jt])
-      smith[k, :] -= alpha * smith[t, :]  
-      left[k, :]  -= alpha * left[t, :]
-    end
-    # if negative, make positive
-    if smith[t, jt] < 0
-      smith[t, :] *= -1
-      left[t, :] *= -1
-    end
-  end
-
-  function improve_pivot_row{T <: Int}( t::Int, jt::Int,
-                                        smith::Matrix{T}, 
-                                        right::Matrix{T} )
-    # Transform matrix such that matrix[:, jt] is zero except for alement t.
-    @assert t <= size(smith, 1)
-    @assert jt <= size(smith, 2)
-    @assert smith[t, jt] != 0
-    for k in 1:size(smith, 2)
-      # If same col or already zero, then continue
-      (k == jt || smith[t, k] == 0) && continue
-      # If not divisible, make divisible
-      if smith[t, k] % smith[t, jt] != 0 
-        # Get parameters of gcd equation
-        sigma, tau, beta = solve_gcd_equation(smith[t, jt], smith[t, k])
-        # Put beta on smith[t, jt]
-        smith[:, jt] = sigma * smith[:, jt] + tau * smith[:, k]
-        right[:, jt] = sigma * right[:, jt] + tau * right[:, k]
-      end
-      # Put 0 on smith[k, jt]
-      alpha = div(smith[t, k], smith[t, jt])
-      smith[:, k] -= alpha * smith[:, jt]  
-      right[:, k] -= alpha * right[:, jt]  
-    end
-    # if negative, make positive
-    if smith[t, jt] < 0
-      smith[:, t] *= -1
-      right[:, t] *= -1
-    end
-  end
-
   function make_divisible{T <: Int}( i::Int,
                                      smith::Matrix{T}, 
                                      left::Matrix{T},
@@ -156,46 +78,6 @@ module SmithNormalForm
       left[t, :] += left[maxrow, :]
     end
   end
-
-# function smith_normal_form{T <: Int}(matrix::Matrix{T})
-
-#   smith::Matrix{T} = deepcopy(matrix)
-#   left ::Matrix{T} = eye(T, size(smith, 1), size(smith, 1))
-#   right::Matrix{T} = eye(T, size(smith, 2), size(smith, 2))
-
-#   t::Int, jt::Int = 0, 0
-#   for t in 1:size(smith, 2)
-#     # First, find pivot
-#     jt = choose_pivot(t, jt+1, smith, left)
-
-#     # Then, make all elements but one zero in row and column
-#     while nnz(smith[:, jt]) > 1 || nnz(smith[t, :]) > 1
-#       improve_pivot_col(t, jt, smith, left)
-#       print("col: $smith\n")
-#       improve_pivot_row(t, jt, smith, right)
-#       print("row: $smith\n")
-#     end
-#     print("Row $jt\n")
-#   end
-
-#   # Figure out non-zero columns and make them first
-#   isNotZero = find([nnz(smith[:, i]) for i in 1:size(smith, 2)])
-#   if length(isNotZero) != size(smith, 2)
-#     isZero    = find([nnz(smith[:, i]) == 0 for i in 1:size(smith, 2)])
-#     smith[:, 1:length(isNotZero)] = smith[:, isNotZero]
-#     smith[:, length(isNotZero)+1:end] = 0
-#     right[:, 1:length(isNotZero)], right[:, length(isZero)+1:end] = 
-#        right[:, isNotZero], right[:, isZero]
-#   end
-
-#   # Finally, make sure things are divisible
-#   for t in 2:size(smith, 2)
-#     smith[t, t] % smith[t-1, t-1] != 0 &&
-#       make_divisible(t, smith, left, right)
-#   end
-
-#   return smith, left, right
-# end
 
   function get_min_max{T <: Int}(array::AbstractArray{T})
     #! Finds indices of maximum and minimum of elements
@@ -293,7 +175,6 @@ module SmithNormalForm
   function smith_normal_form{T <: Int}(matrix::Matrix{T})
 
     @assert size(matrix, 1) == size(matrix, 2)
-    @assert det(matrix) != 0
     smith::Matrix{T} = deepcopy(matrix)
     left::Matrix{T} = eye(T, size(matrix, 1), size(matrix, 1))
     right::Matrix{T} = eye(T, size(matrix, 2), size(matrix, 2))
@@ -322,18 +203,7 @@ module SmithNormalForm
       end
     end
 
-#   @assert smith - diagm(diag(smith)) == zeros(eltype(smith), size(smith)...)
-    smith, left, right
+    diag(smith), left, right
   end
                                 
-
-
- #function smith_normal_form{T}(M::Array{T, 2})
- #  if abs(det(M)) < 
- #  local S::Array{T, 2} = copy(M)
- #  local R::Array{T, 2} = eye(3)
- #  local L::Array{T, 2} = eye(3)
- #end
- 
-
 end
